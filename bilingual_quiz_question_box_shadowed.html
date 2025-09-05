@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Bilingual Quiz</title>
+<link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap" rel="stylesheet"/>
+<style>
+  body { font-family: 'Lato', sans-serif; margin: 0; overflow: hidden;
+         background: #f4f4f4 url('./images/bg.jpg') no-repeat center center fixed; background-size: cover; }
+  .container { display: flex; flex-direction: column; justify-content: center; align-items: center;
+               height: 100vh; width: 100vw; padding: 1rem; box-sizing: border-box; position: relative; }
+  .hidden { display: none !important; }
+  .question { font-size: 2.5vh; margin: 1vh 0; background: #189fc0; padding: 1vh 2vw;
+              border-radius: 8px; max-width: 90vw;  color: #ffffff;  box-shadow: 0 3px 10px rgba(0,0,0,0.15); }
+  .flip-card { background: transparent; width: 90vw; height: 35vh; perspective: 1000px; }
+  .flip-card-inner { position: relative; width: 100%; height: 100%; text-align: center;
+                     transition: transform 0.8s; transform-style: preserve-3d; }
+  .flipped .flip-card-inner { transform: rotateY(180deg); }
+  .flip-card-front, .flip-card-back { position: absolute; width: 100%; height: 100%;
+                                      backface-visibility: hidden; border-radius: 12px; }
+  .flip-card-front img, .flip-card-back img { width: 100%; height: 100%; object-fit: contain; border-radius: 12px; }
+  .flip-card-back { transform: rotateY(180deg); }
+  .answers button { display: block; width: clamp(260px, 55vw, 580px); margin: 1vh auto; padding: 2vh; font-size: 3vh; border: none;
+                    border-radius: 12px; background: #174e6e; color: #fff; cursor: pointer; }
+  .answers button:hover { background: #123b54; }
+  #feedback { font-size: 2.5vh; margin: 2vh auto; background: rgba(255,255,255,0.9); padding: 2vh 2vw; border-radius: 12px;
+              width: 75vw; text-align: center; }
+  #next-btn { margin-top: 2vh; padding: 1.5vh 4vw; font-size: 2vh; }
+  #logo { position: absolute; top: 1vh; left: 1vw; height: 7vh; }
+  #splash-logo { display: block; height: 10vh; margin: 0 auto 2vh auto; }
+  .splash-title { font-size: 3.5vh; color: #003366; margin-bottom: 3vh; background: rgba(255,255,255,0.8);
+                  padding: 1vh 2vw; border-radius: 12px; font-weight: 700; text-align: center; max-width: 90vw; }
+  .lang-select button { font-size: 2.5vh; padding: 1.5vh 4vw; margin: 1vh; }
+  #restart-btn { position: absolute; top: 1vh; right: 1vw; font-size: 2vh; padding: 1vh 2vw; background: red; color: white; border: none; border-radius: 8px; }
+
+  /* Feedback styles matching provided screenshots */
+  .fbk-header{font-size:3.6vh;font-weight:700;margin:0 0 .4em 0}
+  .fbk-header--ok{color:#1a7f37}
+  .fbk-header--bad{color:#c62828}
+  .fbk-answer{font-size:2.7vh;font-weight:700;margin:.2em 0 .6em 0}
+  .fbk-fun{font-size:2.3vh;margin:.2em 0 .8em 0}
+  .fbk-list{font-size:2.1vh;line-height:1.5;margin:.4em auto 0 auto;max-width:80ch;text-align:center}
+  .fbk-list .dot{display:inline-block;margin-right:.4em}
+
+  /* Ploughing-themed result screen */
+  .result-emoji { font-size: 12vh; line-height: 1; margin: 0.25em 0; }
+  .result-sub { font-size: 2.6vh; }
+  .result-title { font-size: 4vh; margin: .2em 0; }
+
+  #question-number{ background:#f18152; color:#ffffff; font-weight:700; }
+</style>
+</head>
+<body>
+<div class="container" id="splash">
+  <img alt="Logo" id="splash-logo" src="./images/logo.png"/>
+  <div class="splash-title"><strong>Welcome to the Our Rural Future National Ploughing Championships Quiz</strong></div>
+  <div class="lang-select">
+    <button id="btn-en" type="button" onclick="window.startQuiz && window.startQuiz('en')">Start in English</button>
+    <button id="btn-ga" type="button" onclick="window.startQuiz && window.startQuiz('ga')">Tosaigh i nGaeilge</button>
+  </div>
+</div>
+
+<div class="container hidden" id="quiz">
+  <img alt="Logo" id="logo" src="./images/logo.png"/>
+  <button id="restart-btn" onclick="window.restartQuiz && window.restartQuiz()">Restart</button>
+  <div class="question" id="question-number"></div>
+  <div class="question" id="question-text"></div>
+  <div class="flip-card" id="flip-card">
+    <div class="flip-card-inner" id="flip-inner">
+      <div class="flip-card-front">
+        <img alt="Front Image" id="img-front" src=""/>
+      </div>
+      <div class="flip-card-back">
+        <img alt="Back Image" id="img-back" src=""/>
+      </div>
+    </div>
+  </div>
+  <div class="answers" id="answers"></div>
+  <div id="feedback"></div>
+  <button id="next-btn" onclick="window.nextQuestion && window.nextQuestion()">Next</button>
+</div>
+
+<script>
+// SAFE escapeHtml: double-quoted keys to avoid syntax errors
+function escapeHtml(s) {
+  const map = {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"};
+  return String(s).replace(/[&<>\"']/g, function(c){ return map[c] || c; });
+}
+function renderFeedback(raw) {
+  const stripped = String(raw || '').replace(/<[^>]*>/g, '');
+  const lines = stripped.split(/\\r?\\n/).map(l => l.trim()).filter(Boolean);
+  const headerLine = lines.shift() || '';
+  let headerHtml = escapeHtml(headerLine);
+  if (/^correct!$/i.test(headerLine)) headerHtml = "<span style='color:#1a7f37; font-weight:700; font-size: calc(1em + 8pt)'>Correct!</span>";
+  else if (/^incorrect!$/i.test(headerLine)) headerHtml = "<span style='color:#c62828; font-weight:700; font-size: calc(1em + 8pt)'>Incorrect!</span>";
+  else if (/^ceart!$/i.test(headerLine)) headerHtml = "<span style='color:#1a7f37; font-weight:700; font-size: calc(1em + 8pt)'>Ceart!</span>";
+  else if (/^mícheart!$/i.test(headerLine)) headerHtml = "<span style='color:#c62828; font-weight:700; font-size: calc(1em + 8pt)'>Mícheart!</span>";
+  let bodyHtml = "";
+  lines.forEach((line, idx) => {
+    if (line.startsWith('•')) {
+      const text = line.replace(/^•\\s*/, '');
+      if (idx === 1) bodyHtml += "<div style='margin-top:1em'></div>";
+      bodyHtml += "<div>• " + escapeHtml(text) + "</div>";
+    } else if (/^the answer is/i.test(line) || /^seo an freagra/i.test(line)) {
+      bodyHtml += "<div>" + escapeHtml(line) + "</div>";
+    } else {
+      bodyHtml += "<div style='font-size: calc(1em + 4pt); font-weight:700'>" + escapeHtml(line) + "</div>";
+    }
+  });
+  return bodyHtml ? headerHtml + "<div style='margin-top:.5em'></div>" + bodyHtml : headerHtml;
+}
+
+const quizData = [{"question_number": 1, "question_en": "Which waterway is this?", "question_ga": "Cén t-uiscebhealach é seo?", "front_image": "images/q1_front.jpg", "back_image": "images/q1_back.jpg", "correct_feedback_en": "<span style='color:green; font-size: larger;'><b>CORRECT!\nUlster Canal\n\n• €5.6 million in Rural Regeneration and Development Fund funding was invested in the Clones section of the Ulster Canal, which opened in April 2024.\n• The RRDF has allocated a whopping €588 million to 243 major projects across Ireland to date!\n</b></span><br><br>", "correct_feedback_ga": "<span style='color:green; font-size: larger;'><b>CEART!\nCanáil Uladh\n\n• Rinneadh €5.6 milliún de mhaoiniú ón Chiste um Athghiniúint agus Forbairt Tuaithe (CAFT) a infheistiú sa chuid de Chanáil Uladh atá suite i gCluain Eois, a osclaíodh in Aibreán 2024.\n• Tá suim ollmhór de €588 milliún leithdháilte ag an CAFT ar 243 mhórthionscadal ar fud na hÉireann go dtí seo!\n</b></span><br><br>", "incorrect_feedback_en": "<span style='color:green; font-size: larger;'><b>INCORRECT!\nThe answer is: Ulster Canal \nWe’ll need to LOCK you out of this Quiz!! \n\n• €5.6 million in Rural Regeneration and Development Fund funding was invested in the Clones section of the Ulster Canal, which opened in April 2024.\n• The RRDF has allocated a whopping €588 million to 243 major projects across Ireland to date!\n</b></span><br><br>", "incorrect_feedback_ga": "<span style='color:green; font-size: larger;'><b>MÍCHEART!\nSeo an freagra: Canáil Uladh \nNá LOIC orainn anois!! \n\n• Rinneadh €5.6 milliún de mhaoiniú ón Chiste um Athghiniúint agus Forbairt Tuaithe (CAFT) a infheistiú sa chuid de Chanáil Uladh atá suite i gCluain Eois, a osclaíodh in Aibreán 2024.\n• Tá suim ollmhór de €588 milliún leithdháilte ag an CAFT ar 243 mhórthionscadal ar fud na hÉireann go dtí seo!\n</b></span><br><br>", "answers_en": ["Ulster Canal", "River Liffey", "Grand Canal", "River Suir"], "answers_ga": ["Canáil Uladh", "An Life", "An Canáil Mhór", "An tSiúir"], "correct_answer_en": "Ulster Canal", "correct_answer_ga": "Canáil Uladh"}, {"question_number": 2, "question_en": "Where is this Playground?", "question_ga": "Cá bhfuil an clós súgartha seo?", "front_image": "images/q2_front.jpg", "back_image": "images/q2_back.jpg", "correct_feedback_en": "<span style='color:green; font-size: larger;'><b>CORRECT!\nBundoran Waterworld Playground, Co. Donegal\n\n• The Community Recognition Fund invested €225,000 to refurbish the playground in 2024.\n• This fund was introduced in 2023 to recognise the efforts made by communities in welcoming and supporting people coming to Ireland. €100 million has been provided to date.\n</b></span><br><br>", "correct_feedback_ga": "<span style='color:green; font-size: larger;'><b>CEART!\nClós Súgartha Waterworld Bhun Dobhráin, Co. Dhún na nGall\n\n• Infheistíodh €225,000 ón Chiste Aitheantais Pobail chun an clós súgartha a athchóiriú in 2024.\n• Cuireadh an ciste seo ar bun in 2023 mar aitheantas ar na hiarrachtaí atá á ndéanamh ag pobail chun fáilte a chur roimh dhaoine a thagann go hÉireann, agus chun tacú leo. Cuireadh €100 milliún ar fáil go dtí seo.\n</b></span><br><br>", "incorrect_feedback_en": "<span style='color:green; font-size: larger;'><b>INCORRECT!\nThe answer is: Bundoran Waterworld Playground, Co. Donegal\nYou’re sliding down the leaderboard!!!\n\n• The Community Recognition Fund invested €225,000 to refurbish the playground in 2024.\n• This fund was introduced in 2023 to recognise the efforts made by communities in welcoming and supporting people coming to Ireland.  €100 million has been provided to date.\n</b></span><br><br>", "incorrect_feedback_ga": "<span style='color:green; font-size: larger;'><b>MÍCHEART!\nSeo an freagra: Clós Súgartha Waterworld Bhun Dobhráin, Co. Dhún na nGall\nTá tú ag sleamhnú síos an clár ceann riain!!!\n\n• Infheistíodh €225,000 ón Chiste Aitheantais Pobail chun an clós súgartha a athchóiriú in 2024.\n• Cuireadh an ciste seo ar bun in 2023 mar aitheantas ar na hiarrachtaí atá á ndéanamh ag pobail chun fáilte a chur roimh dhaoine a thagann go hÉireann, agus chun tacú leo.  Cuireadh €100 milliún ar fáil go dtí seo.\n</b></span><br><br>", "answers_en": ["Bundoran, Co. Donegal", "Ardgillan Castle, Co. Dublin ", "Bray Seafront, Co. Wicklow ", "Passage West, Co. Cork "], "answers_ga": ["Bun Dobhráin, Co. Dhún na nGall", "Caisleán Ard Giolláin, Co. Bhaile Átha Cliath", "Cladach Bhré, Co. Chill Mhantáin", "An Pasáiste, Co. Chorcaí "], "correct_answer_en": "Bundoran, Co. Donegal", "correct_answer_ga": "Bun Dobhráin, Co. Dhún na nGall"}, {"question_number": 3, "question_en": "Which landmark is this?", "question_ga": "Cén sainchomhartha é seo?", "front_image": "images/q3_front.jpg", "back_image": "images/q3_back.jpg", "correct_feedback_en": "<span style='color:green; font-size: larger;'><b>CORRECT!\nLoop Head Lighthouse, Co. Clare\n\n• Under Our Rural Future, 300 community-based BCPs have been installed, including Loop Head Lighthouse! \n• Broadband Connection Points (BCPs) allow the public to access high speed broadband in some of the most rural locations throughout the country.\n</b></span><br><br>", "correct_feedback_ga": "<span style='color:green; font-size: larger;'><b>CEART!\nTeach Solais Cheann Léime, Co. an Chláir\n\n• Faoi Ár dTodhchaí Tuaithe, suiteáladh 300 PNLanna pobalbhunaithe, ceann amháin acu ag Teach Solais Cheann Léime! \n• Le Pointí Naisc Leathanbhanda (PNLanna), is féidir leis an phobal rochtain a fháil ar leathanbhanda ardluais i gcuid de na áiteanna is iargúlta sa tír. \n</b></span><br><br>", "incorrect_feedback_en": "<span style='color:green; font-size: larger;'><b>INCORRECT!\nThe answer is: Loop Head Lighthouse\nThe LIGHTS are on, but no-one’s home!!!\n\n• Our Rural Future committed to the rollout of 300 community-based BCPs, including Loop Head Lighthouse! \n• Broadband Connection Points (BCPs) allow the public to access high speed broadband in some of the most rural locations throughout the country.\n</b></span><br><br>", "incorrect_feedback_ga": "<span style='color:green; font-size: larger;'><b>MÍCHEART!\nSeo an freagra: Teach Solais Cheann Léime\nTá na SOILSE lasta, ach níl duine ar bith sa bhaile!!!\n\n• Gheall Ár dTodhchaí Tuaithe go suiteálfar 300 PNLanna pobalbhunaithe, ceann amháin acu ag Teach Solais Cheann Léime! \n• Le Pointí Naisc Leathanbhanda (PNLanna), is féidir leis an phobal rochtain a fháil ar leathanbhanda ardluais i gcuid de na áiteanna is iargúlta sa tír. \n</b></span><br><br>", "answers_en": ["Loop Head Lighthouse", "Baily Lighthouse", "Rotten Island Lighthouse", "Skelligs Lighthouse"], "answers_ga": ["Teach Solais Cheann Léime", "Teach Solais Dhún Criofainn", "Teach Solais an Oileáin Bhréin", "Teach Solais na Sceilge"], "correct_answer_en": "Loop Head Lighthouse", "correct_answer_ga": "Teach Solais Cheann Léime"}, {"question_number": 4, "question_en": "What is this?", "question_ga": "Cad é seo?", "front_image": "images/q4_front.jpg", "back_image": "images/q4_back.jpg", "correct_feedback_en": "<span style='color:green; font-size: larger;'><b>CORRECT!\nFlour milling machinery, Dunany Flour, Co Louth\n\n• Dunany Flour is a small family flour business in Drogheda, Co Louth.  They have expanded their business with the support of over €57,000 in LEADER funding.\n• The LEADER programme has been at the heart of rural development in Ireland for over 30 years, supporting local projects that bring renewed life, jobs and services to rural communities.\n</b></span><br><br>", "correct_feedback_ga": "<span style='color:green; font-size: larger;'><b>CEART!\nInnealra muilleoireachta plúir, Dunany Flour, Co. Lú\n\n• Gnólacht bheag plúir teaghlaigh é Dunany Flour i nDroichead Átha, Co. Lú.  Tá siad i ndiaidh a ngnólacht a mhéadú le tacaíocht ó mhaoiniú LEADER de luach €57,000.\n• Tá clár LEADER ag croílar na forbartha tuaithe in Éirinn le breis agus 30 bliana anuas, agus tacaíocht á tabhairt do thionscadail áitiúla chun brí athnuaite, postanna agus seirbhísí a thabhairt do phobail tuaithe.\n</b></span><br><br>", "incorrect_feedback_en": "<span style='color:green; font-size: larger;'><b>INCORRECT!\nThe answer is: Flour milling machinery\nI’m afraid you won’t RISE to the top of this Quiz!!! \n\n• Dunany Flour is a small family flour business in Drogheda, Co Louth.  They have expanded their business with the support of over €57,000 in LEADER funding.\n• The LEADER programme has been at the heart of rural development in Ireland for over 30 years, supporting local projects that bring renewed life, jobs and services to rural communities.\n</b></span><br><br>", "incorrect_feedback_ga": "<span style='color:green; font-size: larger;'><b>MÍCHEART!\nSeo an freagra: Innealra muilleoireachta plúir\nNí ARDÓIDH thú go barr thráth na gceist seo faraor!!! \n\n• Gnólacht bheag plúir teaghlaigh é Dunany Flour i nDroichead Átha, Co. Lú.  Tá siad i ndiaidh a ngnólacht a mheadú le tacaíocht ó mhaoiniú LEADER de luach €57,000.\n• Tá clár LEADER ag croílar na forbartha tuaithe in Éirinn le breis agus 30 bliana anuas, agus tacaíocht á tabhairt do thionscadail áitiúla chun brí athnuaite, postanna agus seirbhísí a thabhairt do phobail tuaithe.\n</b></span><br><br>", "answers_en": ["Flour milling machinery", "The Stairway to Heaven", "Milking equipment", "A beer fermentation tank"], "answers_ga": ["Innealra muilleoireachta plúir", "Staighre chun na bhFlaitheas", "Trealamh Crúite", "Umar coipthe beorach"], "correct_answer_en": "Flour milling machinery", "correct_answer_ga": "Innealra muilleoireachta plúir"}, {"question_number": 5, "question_en": "This church in Athy has been given a second life, but as what?", "question_ga": "Tugadh saol eile don tséipéal seo i mBaile Átha Í, ach cad atá ann anois?", "front_image": "images/q5_front.jpg", "back_image": "images/q5_back.jpg", "correct_feedback_en": "<span style='color:green; font-size: larger;'><b>CORRECT!\nIt’s Athy Public Library! \n\n• St Dominic’s Catholic Church in Athy was converted into a beautiful public library in 2018.  It received €1.65m from the Libraries Capital Programme (LCP). \n• The LCP has provided funding of nearly €50m to date. This investment has resulted in nine new libraries being opened and a further two libraries being refurbished.\n</b></span><br><br>", "correct_feedback_ga": "<span style='color:green; font-size: larger;'><b>CEART!\nLeabharlann Phobail Bhaile Átha Í atá ann! \n\n• Rinneadh leabharlann phoiblí álainn de Shéipéal San Doiminic in 2018.  Fuair sé €1.65m ó Chlár Caipitil na Leabharlann (CCL). \n• Cuireadh maoiniú de bheagnach €50m ar fáil faoin CCL go dtí seo. Mar thoradh ar an infheistíocht seo, osclaíodh naoi leabharlann nua agus rinneadh athchóiriú ar dhá cheann eile.\n</b></span><br><br>", "incorrect_feedback_en": "<span style='color:green; font-size: larger;'><b>INCORRECT!\nThe answer is: Athy Public Library\nThe bookworms are shaking their heads!!!\n\n• St Dominic’s Catholic Church in Athy was converted into a beautiful public library.  It opened in 2018, having received €1.65m from the Libraries Capital Programme (LCP). \n• The LCP has provided funding of nearly €50m to date. This investment has resulted in nine new libraries being opened and a further two libraries being refurbished.\n\n</b></span><br><br>", "incorrect_feedback_ga": "<span style='color:green; font-size: larger;'><b>MÍCHEART!\nSeo an freagra: Leabharlann Phobail Bhaile Átha Í\nNíl an lucht léitheoireachta sásta leat!!!\n\n• Rinneadh leabharlann phoiblí álainn de Shéipéal San Doiminic.  Osclaíodh in 2018 í, i ndiaidh €1.65m a fháil faoi Chlár Caipitil na Leabharlann (CCL). \n• Cuireadh maoiniú de bheagnach €50m ar fáil faoin CCL go dtí seo. Mar thoradh ar an infheistíocht seo, osclaíodh naoi leabharlann nua agus rinneadh athchóiriú ar dhá cheann eile.\n</b></span><br><br>", "answers_en": ["Public Library", "Indoor Skate Park", "Farmers’ Market", "Mart"], "answers_ga": ["Leabharlann Phoiblí", "Páirc Scátála Laistigh", "Margadh Feirme", "Marglann"], "correct_answer_en": "Public Library", "correct_answer_ga": "Leabharlann Phoiblí"}, {"question_number": 6, "question_en": "Which famous mountain is this?", "question_ga": "Cén sliabh cáiliúil é seo?", "front_image": "images/q6_front.jpg", "back_image": "images/q6_back.jpg", "correct_feedback_en": "<span style='color:green; font-size: larger;'><b>CORRECT!\nCroagh Patrick \n\n• €480,000 was allocated to ensure the long-term sustainability of Croagh Patrick by addressing the substantial erosion/scarring of the mountain and fixing the path walked by the more than 50,000 visitors every year.\n• The Outdoor Recreation Infrastructure Scheme has invested over €129 million in 1776 projects since 2016, including fabulous walking and cycling trails, greenways and watersports facilities.\n</b></span><br><br>", "correct_feedback_ga": "<span style='color:green; font-size: larger;'><b>CEART!\nCruach Phádraig \n\n• Cuireadh €480,000 ar fáil chun inbhuanaitheacht fhadtéarmach Chruach Phádraig a chinntiú, trí dhul i ngleic leis an chreimeadh/éadan rite ar an tsliabh agus trí chóiriú a dhéanamh ar an chosán ar a mbíonn os cionn 50,000 cuairteoir ag siúl gach bliain.\n• Faoin Scéim um Bonneagar Fóillíochta Lasmuigh, infheistíodh os cionn €129 milliún in 1776 thionscadal ó 2016 i leith, cosúil le conairí siúil agus rothaíochta, glasbhealaí, agus áiseanna spórt uisce galánta.\n</b></span><br><br>", "incorrect_feedback_en": "<span style='color:green; font-size: larger;'><b>INCORRECT!\nThe answer is: Croagh Patrick\nYou’ve still some hill to climb to get to the top of this Quiz!!!\n\n• €480,000 was allocated to ensure the long-term sustainability of Croagh Patrick by addressing the substantial erosion/scarring of the mountain and fixing the path walked by the more than 50,000 visitors every year.\n• The Outdoor Recreation Infrastructure Scheme has invested over €129 million in 1776 projects since 2016, including fabulous walking and cycling trails, greenways and watersports facilities.\n</b></span><br><br>", "incorrect_feedback_ga": "<span style='color:green; font-size: larger;'><b>MÍCHEART!\nSeo an freagra: Cruach Phádraig\nTuilleadh dreapadóireacht de dhíth chun barr Thráth na gCeist seo a shroicheadh!!!\n\n• Cuireadh €480,000 ar fáil chun inbhuanaitheacht fhadtéarmach Chruach Phádraig a chinntiú, trí dhul i ngleic leis an chreimeadh/éadan rite ar an tsliabh agus trí chóiriú a dhéanamh ar an chosán ar a mbíonn os cionn 50,000 cuairteoir ag siúl gach bliain.\n• Faoin Scéim um Bonneagar Fóillíochta Lasmuigh, infheistíodh os cionn €129 milliún in 1776 thionscadal ó 2016 i leith, cosúil le conairí siúil agus rothaíochta, glasbhealaí, agus áiseanna spórt uisce galánta.\n</b></span><br><br>", "answers_en": ["Croagh Patrick", "Space Mountain", "The Sugar Loaf", "Carrauntoohil"], "answers_ga": ["Cruach Phádraig", "Space Mountain", "Ó Cualann", "Corrán Tuathail"], "correct_answer_en": "Croagh Patrick", "correct_answer_ga": "Cruach Phádraig"}, {"question_number": 7, "question_en": "What building is this?", "question_ga": "Cén foirgneamh é seo?", "front_image": "images/q7_front.jpg", "back_image": "images/q7_back.jpg", "correct_feedback_en": "<span style='color:green; font-size: larger;'><b>CORRECT!\ngteic@Uíbh Ráthach\n\n• Gréasán gteic digiteach na Gaeltachta is a network of 29 digital hubs located throughout the Gaeltacht and Island regions.\n• gteic@Uíbh Ráthach currently offers 38 workspaces and three meeting rooms and is available to book on Connectedhubs.ie. It received over €2.4 million Rural Regeneration and Development Fund.\n</b></span><br><br>", "correct_feedback_ga": "<span style='color:green; font-size: larger;'><b>CEART!\ngteic@Uíbh Ráthach\n\n• Is gréasán de 29 mol digiteacha é gteic - Gréasán Digiteach na Gaeltachta atá lonnaithe ar fud réigiúin na Gaeltachta agus na nOileán.\n• Tá 38 spás oibre agus trí sheomra cruinnithe ar fáil faoi láthair in gteic@Uíbh Ráthach agus is féidir iad a chur in áirithe ar Connectedhubs.ie. Fuair siad breis is €2.4 milliún faoin Chiste um Athghiniúint agus Forbairt Tuaithe.\n</b></span><br><br>", "incorrect_feedback_en": "<span style='color:green; font-size: larger;'><b>INCORRECT!\nThe answer is: gteic@Uíbh Ráthach\nYou’ll need to MEET better standards to guess correctly!!!\n\n• Gréasán gteic digiteach na Gaeltachta is a network of 29 digital hubs located throughout the Gaeltacht and Island regions.\n• gteic@Uíbh Ráthach currently offers 38 workspaces and three meeting rooms and is available to book on Connectedhubs.ie. It received over €2.4 million Rural Regeneration and Development Fund.\n</b></span><br><br>", "incorrect_feedback_ga": "<span style='color:green; font-size: larger;'><b>MÍCHEART!\nSeo an freagra: gteic@Uíbh Ráthach\nBeidh ort do smaointe a CHRUINNIÚ chun na freagraí cearta a thabhairt!!!\n\n• Is gréasán de 29 mol digiteacha é gteic - Gréasán Digiteach na Gaeltachta atá lonnaithe ar fud réigiúin na Gaeltachta agus na nOileán.\n• Tá 38 spás oibre agus trí sheomra cruinnithe ar fáil faoi láthair in gteic@Uíbh Ráthach agus is féidir iad a chur in áirithe ar Connectedhubs.ie. Fuair siad breis is €2.4 milliún faoin Chiste um Athghiniúint agus Forbairt Tuaithe.\n</b></span><br><br>", "answers_en": [" gteic@Uíbh Ráthach", "Atlantic Technological University", "Cork Opera House", "Ennis Courthouse"], "answers_ga": [" gteic@Uíbh Ráthach", "Ollscoil Teicneolaíochta an Atlantaigh", "Áras Ceoldrámaíochta Chorcaí", "Teach Cúirte Inse"], "correct_answer_en": " gteic@Uíbh Ráthach", "correct_answer_ga": " gteic@Uíbh Ráthach"}, {"question_number": 8, "question_en": "Can you tell us what this space has been transformed into?", "question_ga": "Inis dúinn cén áis nua a cuireadh sa spás seo?", "front_image": "images/q8_front.jpg", "back_image": "images/q8_back.jpg", "correct_feedback_en": "<span style='color:green; font-size: larger;'><b>CORRECT!\nBelturbet Youth Hub\n\n• This extension of Belturbet Youth Hub received funding of €55,800 under the Town & Village Renewal Scheme (TVRS). \n• TVRS has transformed places across Ireland since 2016, with over €177 million of funding approved for almost 1,800 projects, including multi-purpose community facilities, parks and recreation amenities and other town centre upgrades.\n</b></span><br><br>", "correct_feedback_ga": "<span style='color:green; font-size: larger;'><b>CEART!\nMol Óige Bhéal Tairbirt\n\n• Tugadh maoiniú de €55,800 faoin Scéim um Athnuachan Bailte agus Sráidbhailte (SABS) i gcomhair an síneadh seo ar Mhol Óige Bhéal Tairbrit. \n• Tá athrú ó bhonn tagtha ar áiteanna ar fud na hÉireann faoin SABS ó 2016 i leith, le breis agus €177 milliún ceadaithe i gcomhair beagnach 1,800 tionscadal, ar a n-áirítear áiseanna pobail ilchuspóireacha, páirceanna agus áiseanna fóillíochta agus uasghráduithe eile ar lár bailte.</b></span><br><br>", "incorrect_feedback_en": "<span style='color:green; font-size: larger;'><b>INCORRECT!\nThe answer is: Belturbet Youth Hub\nYou’ve been SNOOKERED on this question!!!\n\n• This extension of Belturbet Youth Hub, received funding of €55,800 under the Town & Village Renewal Scheme (TVRS). \n• TVRS has transformed places across Ireland since 2016, with over €177 million of funding approved for almost 1,800 projects, including multi-purpose community facilities, parks and recreation amenities and other town centre upgrades.</b></span><br><br>", "incorrect_feedback_ga": "<span style='color:green; font-size: larger;'><b>MÍCHEART!\nSeo an freagra: Mol Óige Bhéal Tairbirt\nTá tú SNÚCARÁILTE againn leis an cheist seo!!!\n\n• Tugadh maoiniú de €55,800 faoin Scéim um Athnuachan Bailte agus Sráidbhailte (SABS) i gcomhair an síneadh seo ar Mhol Óige Bhéal Tairbrit. \n• Tá athrú ó bhonn tagtha ar áiteanna ar fud na hÉireann faoin SABS ó 2016 i leith, le breis agus €177 milliún ceadaithe i gcomhair beagnach 1,800 tionscadal, ar a n-áirítear áiseanna pobail ilchuspóireacha, páirceanna agus áiseanna fóillíochta agus uasghráduithe eile ar lár bailte.</b></span><br><br>", "answers_en": ["Youth Centre", "Childcare facility", "Remote working hub", "Theme Park"], "answers_ga": ["Ionad Óige", "Áis Cúram Leanaí", "Mol Cianoibre", "Páirc Shiamsaíochta Théama"], "correct_answer_en": "Youth Centre", "correct_answer_ga": "Ionad Óige"}];
+let current = 0, score = 0, lang = 'en';
+const quizHTML = document.getElementById("quiz").innerHTML;
+
+function startQuiz(selectedLang) {
+  console.log("Starting quiz in language:", selectedLang);
+  lang = selectedLang;
+  document.getElementById("splash").classList.add("hidden");
+  document.getElementById("quiz").classList.remove("hidden");
+  showQuestion();
+}
+
+function showQuestion() {
+  const flipCard = document.getElementById("flip-card");
+  const flipInner = document.getElementById("flip-inner");
+
+  // Fix: prevent back image flash when advancing
+  if (flipInner) flipInner.style.transition = 'none';
+  flipCard.classList.remove("flipped");
+  if (flipInner) void flipInner.offsetWidth; // force reflow
+  if (flipInner) flipInner.style.transition = '';
+
+  document.getElementById("feedback").innerHTML = "";
+  document.getElementById("next-btn").style.display = "none";
+
+  const q = quizData[current];
+  document.getElementById("question-number").textContent = "Question " + (current + 1);
+  document.getElementById("question-text").textContent = q["question_" + lang];
+
+  document.getElementById("img-front").src = "./" + q.front_image.trim();
+  document.getElementById("img-back").src = "./" + q.back_image.trim();
+
+  const answers = [...q["answers_" + lang]];
+  shuffle(answers);
+
+  const answersDiv = document.getElementById("answers");
+  answersDiv.innerHTML = "";
+  answers.forEach(answer => {
+    const btn = document.createElement("button");
+    btn.textContent = answer;
+    btn.onclick = () => {
+      const correctAnswer = q["correct_answer_" + lang];
+      const feedback = answer === correctAnswer ? q["correct_feedback_" + lang] : q["incorrect_feedback_" + lang];
+      if (answer === correctAnswer) score++;
+
+      flipCard.classList.add("flipped");
+
+      answersDiv.innerHTML = "";
+      document.getElementById("feedback").innerHTML = renderFeedbackV2(feedback);
+      document.getElementById("next-btn").style.display = "inline-block";
+    };
+    answersDiv.appendChild(btn);
+  });
+}
+
+function nextQuestion() {
+  current++;
+  if (current < quizData.length) showQuestion();
+  else showResult();
+}
+
+function showResult() {
+  const emojis = ["🌪️","🌧️","🌱","🪓","🧑‍🌾","🌾","🚜","🥔","🐄","🥇","🏆"];
+  const messages = [
+    "Field left fallow – time to walk the plots!",
+    "A few furrows started – keep at it!",
+    "Seed’s in the ground – it’ll grow!",
+    "Sharpen the plough and try again!",
+    "Good showing in the ring.",
+    "Half the field done – grand going!",
+    "Fair play – you’re finding your furrow!",
+    "Rosettes in sight – mighty work!",
+    "Champion stuff – the crowd approves!",
+    "Nearly Overall Champion – one more push!",
+    "Overall Champion of the Plough!"
+  ];
+  const container = document.getElementById("quiz");
+  container.innerHTML = `
+    <img src="./images/logo.png" id="logo" alt="Logo">
+    <button id="restart-btn" onclick="window.restartQuiz && window.restartQuiz()">Restart</button>
+    <div class="result-title">National Ploughing Championships Quiz – Results</div>
+    <div class="result-emoji">${emojis[score]}</div>
+    <p class="result-sub">Your score: ${score} / ${quizData.length}</p>
+    <p class="result-sub">${messages[score]}</p>
+  `;}
+
+function restartQuiz() {
+  current = 0; score = 0;
+  document.getElementById("quiz").innerHTML = quizHTML;
+  document.getElementById("quiz").classList.add("hidden");
+  document.getElementById("splash").classList.remove("hidden");
+}
+
+function shuffle(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+}
+
+// Expose for inline handlers
+window.startQuiz = startQuiz;
+window.nextQuestion = nextQuestion;
+window.restartQuiz = restartQuiz;
+
+// Also attach listeners (works if CSP disallows inline)
+(function () {
+  function safeStart(lang) {
+    if (typeof window.startQuiz === 'function') {
+      window.startQuiz(lang);
+    }
+  }
+  function bindButtons() {
+    var en = document.getElementById('btn-en');
+    var ga = document.getElementById('btn-ga');
+    if (en && !en.__bound) { en.addEventListener('click', function () { safeStart('en'); }); en.__bound = true; }
+    if (ga && !ga.__bound) { ga.addEventListener('click', function () { safeStart('ga'); }); ga.__bound = true; }
+  }
+  document.addEventListener('DOMContentLoaded', bindButtons);
+  if (document.readyState === 'interactive' || document.readyState === 'complete') bindButtons();
+})();
+</script>
+
+<script>
+// Keep renderFeedbackV2 as in your file
+function renderFeedbackV2(raw){
+  // Strip any HTML and split into lines
+  var stripped = String(raw||'').replace(/<[^>]*>/g,'');
+  var parts = stripped.split(/\r?\n/).map(function(l){return l.trim();}).filter(Boolean);
+
+  // Header
+  var header = parts.shift() || '';
+  var isCorrect = /^(correct!|ceart!)$/i.test(header);
+  var isIncorrect = /^(incorrect!|mícheart!)$/i.test(header);
+  var headerClass = isCorrect ? 'fbk-header--ok' : (isIncorrect ? 'fbk-header--bad' : '');
+  var headerHtml = '<div class="fbk-header '+headerClass+'">'+(isCorrect?'Correct!':isIncorrect?'Incorrect!':escapeHtml(header))+'</div>';
+
+  // Answer line
+  var answerLine = '';
+  if (parts.length){
+    var nxt = parts[0];
+    var m1 = /^the answer is\s*:?\s*(.*)$/i.exec(nxt);
+    var m2 = /^seo an freagra\s*:?\s*(.*)$/i.exec(nxt);
+    if (m1){ answerLine = m1[1]; parts.shift(); }
+    else if (m2){ answerLine = m2[1]; parts.shift(); }
+    else { answerLine = nxt; parts.shift(); }
+  }
+  var answerHtml = answerLine ? '<div class="fbk-answer">'+escapeHtml(answerLine)+'</div>' : '';
+
+  // Optional fun line: next non-bullet line
+  var funHtml = '';
+  if (parts.length && !/^•/.test(parts[0])){
+    funHtml = '<div class="fbk-fun">'+escapeHtml(parts[0])+'</div>';
+    parts.shift();
+  }
+
+  // Bullets
+  var bullets = parts.filter(function(p){ return /^•/.test(p); }).map(function(p){
+    return '<div><span class="dot">•</span>'+escapeHtml(p.replace(/^•\s*/,''))+'</div>';
+  }).join('');
+  var listHtml = bullets ? '<div class="fbk-list">'+bullets+'</div>' : '';
+
+  return headerHtml + answerHtml + funHtml + listHtml;
+}
+</script>
+
+</body>
+</html>
